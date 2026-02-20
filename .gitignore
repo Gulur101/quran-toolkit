@@ -26,8 +26,10 @@ out/
 
 # local caches / build artifacts
 server/madani-604.json
+server/users.json
 
 # client/server build and deps
 client/build/
 client/dist/
 client/node_modules/
+server/node_modules/

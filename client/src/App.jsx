@@ -4,6 +4,7 @@ import "./index.css";
 
 const TOTAL_PAGES = 604;
 const LOCAL_KEY = "familyProgress";
+const LOCAL_USERS_KEY = "familyUsers";
 
 function App() {
   const [users, setUsers] = useState([]);
@@ -13,21 +14,32 @@ function App() {
 
   // load saved local progress immediately, then fetch from server and merge
   useEffect(() => {
+    // load saved users (full) first so the UI reacts immediately on phones without a server
+    const savedUsers = localStorage.getItem(LOCAL_USERS_KEY);
+    if (savedUsers) {
+      try {
+        setUsers(JSON.parse(savedUsers));
+      } catch (e) { /* ignore */ }
+    }
+
     const saved = localStorage.getItem(LOCAL_KEY);
     if (saved) {
       try {
         const map = JSON.parse(saved);
-        // create a lightweight initial users list from local map if no server data yet
-        const initial = Object.keys(map).map((idStr, idx) => ({
-          id: Number(idStr),
-          name: "Participant",
-          currentPage: map[idStr],
-        }));
-        if (initial.length && users.length === 0) setUsers(initial);
+        if (!savedUsers) {
+          // create lightweight users if no full user list saved
+          const initial = Object.keys(map).map((idStr, idx) => ({
+            id: idStr.startsWith("local-") ? idStr : Number(idStr),
+            name: "Participant",
+            currentPage: map[idStr],
+          }));
+          if (initial.length) setUsers(initial);
+        }
       } catch (e) {
         console.warn("Invalid local storage data:", e);
       }
     }
+
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -64,6 +76,8 @@ function App() {
     }, {});
     try {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(map));
+      // also persist full users so names survive on phones without server
+      localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
     } catch (e) {
       console.warn("Failed to write localStorage:", e);
     }
@@ -135,11 +149,21 @@ function App() {
     if (!name) return;
     try {
       setCreating(true);
+      // try server first
       await axios.post("http://localhost:5000/users", { name });
       setNewName("");
       fetchUsers();
     } catch (err) {
-      console.error(err);
+      // fallback: create a local-only user when server is unreachable (e.g. on GitHub Pages / mobile)
+      console.warn("Server create failed, adding local user:", err.message);
+      const localId = `local-${Date.now()}`;
+      const localUser = { id: localId, name, currentPage: 1 };
+      setUsers(prev => {
+        const next = [...prev, localUser];
+        // local persistence handled by the users effect
+        return next;
+      });
+      setNewName("");
     } finally {
       setCreating(false);
     }
