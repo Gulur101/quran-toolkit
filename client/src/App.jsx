@@ -7,6 +7,8 @@ const TOTAL_PAGES = 604;
 function App() {
   const [users, setUsers] = useState([]);
   const [inputs, setInputs] = useState({});
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const fetchUsers = async () => {
     const res = await axios.get("http://localhost:5000/users");
@@ -49,6 +51,39 @@ function App() {
     fetchUsers();
   };
 
+  // delete user
+  const deleteUser = async (id) => {
+    if (!window.confirm("Remove this participant?")) return;
+    try {
+      await axios.delete(`http://localhost:5000/users/${id}`);
+      // clear any input state for removed user
+      setInputs(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      fetchUsers();
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+    }
+  };
+
+  const createUser = async (e) => {
+    e.preventDefault();
+    const name = (newName || "").trim();
+    if (!name) return;
+    try {
+      setCreating(true);
+      await axios.post("http://localhost:5000/users", { name });
+      setNewName("");
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="app-container">
       <header className="header" aria-hidden>
@@ -62,6 +97,56 @@ function App() {
 
         <div className="calligraphy">القرآن الكريم — متابعة العائلة</div>
       </header>
+
+      {/* friendly signup / add user */}
+      <form
+        onSubmit={createUser}
+        style={{
+          margin: "12px 0",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap"
+        }}
+        aria-label="Join Quran tracking"
+      >
+        <label htmlFor="newName" style={{ position: "absolute", left: -9999 }}>
+          Enter your name
+        </label>
+
+        <input
+          id="newName"
+          placeholder="Your name (e.g. Mohamed)"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          style={{
+            padding: "10px 12px",
+            fontSize: 16,
+            borderRadius: 8,
+            border: "1px solid rgba(0,0,0,0.12)",
+            minWidth: 240
+          }}
+          aria-describedby="newNameHint"
+        />
+
+        <button
+          type="submit"
+          disabled={!newName.trim() || creating}
+          style={{
+            padding: "10px 14px",
+            fontSize: 16,
+            borderRadius: 8,
+            cursor: !newName.trim() || creating ? "not-allowed" : "pointer"
+          }}
+        >
+          {creating ? "Joining…" : "Join"}
+        </button>
+
+        {/* hint moved below inputs and styled via CSS */}
+        <div id="newNameHint" className="form-hint">
+          * enter your name to participate in the quran track
+        </div>
+      </form>
 
       {displayUsers.map(user => {
         const prog = Number(user.progress) || 0;
@@ -107,19 +192,31 @@ function App() {
             {isLagger && <span style={{ marginLeft: 10 }}>🐢 Behind</span>}
           </p>
 
-           <input
-             type="number"
-             className="page-input"
-             placeholder="Enter page number"
-             value={inputs[user.id] || ""}
-             onChange={(e) =>
-               setInputs({ ...inputs, [user.id]: e.target.value })
-             }
-           />
+           {/* controls: input + save on left, delete on far right */}
+           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+             <input
+               type="number"
+               className="page-input"
+               placeholder="Enter page number"
+               value={inputs[user.id] || ""}
+               onChange={(e) =>
+                 setInputs({ ...inputs, [user.id]: e.target.value })
+               }
+               style={{ minWidth: 140 }}
+             />
 
-           <button onClick={() => updatePage(user.id)}>
-             Save
-           </button>
+             <button onClick={() => updatePage(user.id)}>
+               Save
+             </button>
+
+             <button
+               onClick={() => deleteUser(user.id)}
+               style={{ marginLeft: "auto", background: "white", color: "#e04", border: "1px solid rgba(224,4,4,0.08)", padding: "8px 10px", borderRadius: 8, cursor: "pointer" }}
+               title="Delete participant"
+             >
+               🗑️ Delete
+             </button>
+           </div>
         </div>
       )})}
      </div>

@@ -1,22 +1,34 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const TOTAL_PAGES = 604;
+const DATA_FILE = path.join(__dirname, "users.json");
 
-let users = [
-  { id: 1, name: "Marouan", currentPage: 1 },
-  { id: 2, name: "Yasmine", currentPage: 1 },
-  { id: 3, name: "Melek", currentPage: 1 },
-  { id: 4, name: "Fedi", currentPage: 1 },
-  { id: 5, name: "Mohamed", currentPage: 1 },
-  { id: 6, name: "Farida", currentPage: 1 },
-  { id: 7, name: "Sarah", currentPage: 1 },
-  { id: 8, name: "Jasmine", currentPage: 1 }
-];
+let users = [];
+
+// load users from disk if present
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    users = JSON.parse(raw);
+  }
+} catch (err) {
+  console.error("Failed to load users.json, using in-memory list:", err.message);
+}
+
+function saveUsers() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2), "utf8");
+  } catch (err) {
+    console.error("Failed to save users.json:", err.message);
+  }
+}
 
 function getJuz(page) {
   return Math.ceil(page / (TOTAL_PAGES / 30));
@@ -169,12 +181,39 @@ app.get("/users", (req, res) => {
   res.json(enhanced);
 });
 
+// create new user
+app.post("/users", (req, res) => {
+  const name = (req.body.name || "").trim();
+  if (!name) return res.status(400).json({ error: "Name required" });
+
+  const maxId = users.length ? Math.max(...users.map(u => u.id)) : 0;
+  const newUser = {
+    id: maxId + 1,
+    name,
+    currentPage: 1
+  };
+  users.push(newUser);
+  saveUsers();
+  res.status(201).json(newUser);
+});
+
+// update existing user (persist)
 app.put("/users/:id", (req, res) => {
   const user = users.find(u => u.id == req.params.id);
   if (!user) return res.status(404).send("Not found");
 
-  user.currentPage = Number(req.body.currentPage);
+  user.currentPage = Number(req.body.currentPage) || user.currentPage;
+  saveUsers();
   res.json(user);
+});
+
+// optional: delete user
+app.delete("/users/:id", (req, res) => {
+  const idx = users.findIndex(u => u.id == req.params.id);
+  if (idx === -1) return res.status(404).send("Not found");
+  const removed = users.splice(idx, 1)[0];
+  saveUsers();
+  res.json(removed);
 });
 
 app.listen(5000, () => {

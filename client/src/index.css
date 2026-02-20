@@ -294,3 +294,13 @@ button:hover {
 @media (max-width: 640px) {
   .card h2 { font-size: 18px; }
 }
+
+/* hint placed under the inputs and shown in white */
+.form-hint {
+  flex-basis: 100%;       /* force new line below the form controls */
+  color: #ffffff;         /* white text */
+  font-size: 13px;
+  margin-top: 8px;
+  opacity: 0.95;
+  padding-left: 4px;
+}
