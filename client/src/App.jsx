@@ -3,6 +3,7 @@ import axios from "axios";
 import "./index.css";
 
 const TOTAL_PAGES = 604;
+const LOCAL_KEY = "familyProgress";
 
 function App() {
   const [users, setUsers] = useState([]);
@@ -10,12 +11,63 @@ function App() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // load saved local progress immediately, then fetch from server and merge
+  useEffect(() => {
+    const saved = localStorage.getItem(LOCAL_KEY);
+    if (saved) {
+      try {
+        const map = JSON.parse(saved);
+        // create a lightweight initial users list from local map if no server data yet
+        const initial = Object.keys(map).map((idStr, idx) => ({
+          id: Number(idStr),
+          name: "Participant",
+          currentPage: map[idStr],
+        }));
+        if (initial.length && users.length === 0) setUsers(initial);
+      } catch (e) {
+        console.warn("Invalid local storage data:", e);
+      }
+    }
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchUsers = async () => {
-    const res = await axios.get("http://localhost:5000/users");
-    setUsers(res.data);
+    try {
+      const res = await axios.get("http://localhost:5000/users");
+      const serverUsers = res.data || [];
+
+      // merge with local saved pages (local overrides server)
+      let localMap = {};
+      try {
+        localMap = JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}");
+      } catch (e) { /* ignore */ }
+
+      const merged = serverUsers.map(u => {
+        if (localMap[u.id]) {
+          return { ...u, currentPage: Number(localMap[u.id]) };
+        }
+        return u;
+      });
+
+      setUsers(merged);
+    } catch (err) {
+      console.error("Failed to fetch users, keeping local data:", err);
+    }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  // persist local mapping of id -> currentPage whenever users change
+  useEffect(() => {
+    const map = users.reduce((acc, u) => {
+      if (u && u.id != null) acc[u.id] = Number(u.currentPage) || 1;
+      return acc;
+    }, {});
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(map));
+    } catch (e) {
+      console.warn("Failed to write localStorage:", e);
+    }
+  }, [users]);
 
   // compute min/max progress for highlighting
   const progressValues = users.map(u => Number(u.progress) || 0);
@@ -44,11 +96,20 @@ function App() {
     const page = Number(inputs[id]);
     if (!page || page < 1 || page > TOTAL_PAGES) return;
 
-    await axios.put(`http://localhost:5000/users/${id}`, {
-      currentPage: page
+    // optimistic update locally
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, currentPage: page } : u));
+    setInputs(prev => {
+      const copy = { ...prev }; delete copy[id]; return copy;
     });
 
-    fetchUsers();
+    // persist to server (if available) but keep local override even if server fails
+    try {
+      await axios.put(`http://localhost:5000/users/${id}`, { currentPage: page });
+      // refresh server values but preserve local overrides
+      fetchUsers();
+    } catch (err) {
+      console.warn("Server update failed, saved locally:", err);
+    }
   };
 
   // delete user
