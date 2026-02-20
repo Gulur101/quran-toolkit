@@ -6,30 +6,6 @@ const TOTAL_PAGES = 604;
 const LOCAL_KEY = "familyProgress";
 const LOCAL_USERS_KEY = "familyUsers";
 
-function calcProgressFromPage(page) {
-  const p = Number(page) || 0;
-  return Math.max(0, Math.min(100, Math.round((p / TOTAL_PAGES) * 100)));
-}
-
-function enhanceUser(u) {
-  const currentPage = Number(u.currentPage) || 0;
-  const progress = calcProgressFromPage(currentPage);
-  // keep any existing derived fields if present, otherwise add defaults
-  return {
-    ...u,
-    currentPage,
-    progress,
-    juz: u.juz ?? Math.ceil(currentPage / (TOTAL_PAGES / 30)),
-    surah: u.surah ?? u.name ?? "—",
-    surahArabic: u.surahArabic ?? "—",
-    surahFull: u.surahFull ?? ""
-  };
-}
-
-function enhanceUsers(list) {
-  return (list || []).map(enhanceUser);
-}
-
 function App() {
   const [users, setUsers] = useState([]);
   const [inputs, setInputs] = useState({});
@@ -42,7 +18,7 @@ function App() {
     const savedUsers = localStorage.getItem(LOCAL_USERS_KEY);
     if (savedUsers) {
       try {
-        setUsers(enhanceUsers(JSON.parse(savedUsers)));
+        setUsers(JSON.parse(savedUsers));
       } catch (e) { /* ignore */ }
     }
 
@@ -86,7 +62,7 @@ function App() {
         return u;
       });
 
-      setUsers(enhanceUsers(merged));
+      setUsers(merged);
     } catch (err) {
       console.error("Failed to fetch users, keeping local data:", err);
     }
@@ -182,7 +158,11 @@ function App() {
       console.warn("Server create failed, adding local user:", err.message);
       const localId = `local-${Date.now()}`;
       const localUser = { id: localId, name, currentPage: 1 };
-      setUsers(prev => enhanceUsers([...prev, localUser]));
+      setUsers(prev => {
+        const next = [...prev, localUser];
+        // local persistence handled by the users effect
+        return next;
+      });
       setNewName("");
     } finally {
       setCreating(false);
